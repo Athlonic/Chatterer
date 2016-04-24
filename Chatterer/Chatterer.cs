@@ -64,6 +64,7 @@ namespace Chatterer
         public List<AudioClip> capcom;
         public List<AudioClip> capsule;
         public List<AudioClip> capsuleF;
+        public List<AudioClip> capsuleR;
         public string directory;
         public bool is_active;
 
@@ -72,6 +73,7 @@ namespace Chatterer
             capcom = new List<AudioClip>();
             capsule = new List<AudioClip>();
             capsuleF = new List<AudioClip>();
+            capsuleR = new List<AudioClip>();
             directory = "dir";
             is_active = true;
         }
@@ -153,6 +155,10 @@ namespace Chatterer
         private static System.Random rand = new System.Random();
 
         private int window_base_id = -12381578;
+        private const int gender_values_length = 3;
+        private const int gender_male = 0;
+        private const int gender_female = 1;
+        private const int gender_robot = 2;
         
         private Vessel vessel;          //is set to FlightGlobals.ActiveVessel
         private Vessel prev_vessel;     //to detect change in active vessel
@@ -190,9 +196,11 @@ namespace Chatterer
         private List<AudioClip> current_capcom_chatter = new List<AudioClip>();     //holds chatter of toggled sets
         private List<AudioClip> current_capsule_chatter = new List<AudioClip>();    //one of these becomes initial, the other response
         private List<AudioClip> current_capsuleF_chatter = new List<AudioClip>(); //Female set
+        private List<AudioClip> current_capsuleR_chatter = new List<AudioClip>(); //Robot set
         private int current_capcom_clip;
         private int current_capsule_clip;
         private int current_capsuleF_clip;
+        private int current_capsuleR_clip;
 
         private AudioClip quindar_clip;
 
@@ -200,7 +208,7 @@ namespace Chatterer
         private bool exchange_playing = false;
         private bool response_chatter_started = false;
         private bool pod_begins_exchange = false;
-        private bool chatter_is_female = false;
+        private bool[] present_chatter_genders = new bool[gender_values_length];
         private int initial_chatter_source; //whether capsule or capcom begins exchange
         private List<AudioClip> initial_chatter_set = new List<AudioClip>();    //random clip pulled from here
         private int initial_chatter_index;  //index of random clip
@@ -614,17 +622,40 @@ namespace Chatterer
 
             if (debugging) Debug.Log("[CHATR] Event scienceTX triggered, reason : " + scitxreason.ToString());
         }
+        
+        private bool checkRobotPresent()
+        {
+            if (vessel.Autopilot != null && vessel.Autopilot.SAS != null)
+            {
+                return vessel.Autopilot.SAS.CanEngageSAS();
+            }
+            return false;
+        }
 
         private void checkChatterGender()
         {
-            chatter_is_female = false;
+            present_chatter_genders[gender_male] = false;
+            present_chatter_genders[gender_female] = false;
+            present_chatter_genders[gender_robot] = false;
+            
             var crew = vessel.GetVesselCrew();
-            if (crew.Count > 0) chatter_is_female = ProtoCrewMember.Gender.Female == crew[0].gender ? true : false;
-
+            for (int i = 0; i < crew.Count; i++)
+            {
+                switch (crew[i].gender)
+                {
+                    case ProtoCrewMember.Gender.Male:
+                        present_chatter_genders[gender_male] = true;
+                        break;
+                    case ProtoCrewMember.Gender.Female:
+                        present_chatter_genders[gender_female] = true;
+                        break;
+                }
+            }
+            if (crew.Count == 0 && checkRobotPresent()) present_chatter_genders[gender_robot] = true;
+            
             if (debugging)
             {
-                if (crew.Count == 0) Debug.Log("[CHATR] No Chatter gender check (no crew in the vicinity)");
-                else Debug.Log("[CHATR] Chatter is female :" + chatter_is_female.ToString());
+                Debug.Log("[CHATR] Chatterers present, Male: " + present_chatter_genders[gender_male].ToString() + ", Female: " + present_chatter_genders[gender_female].ToString() + ", Robot: " + present_chatter_genders[gender_robot].ToString());
             }
         }
 
@@ -821,7 +852,7 @@ namespace Chatterer
             GUILayout.BeginHorizontal();
 
             //Show "Chatter" menu button
-            if (chatter_exists && vessel.GetCrewCount() > 0)
+            if (chatter_exists && vessel.GetCrewCount() > 0 || checkRobotPresent())
             {
                 if (GUILayout.Button("Chatter"))
                 {
@@ -882,7 +913,7 @@ namespace Chatterer
             GUILayout.EndHorizontal();
 
             //Display GUI accordingly
-            if (menu == "chatter" && vessel.GetCrewCount() > 0) chatter_gui();
+            if (menu == "chatter" && vessel.GetCrewCount() > 0 || checkRobotPresent()) chatter_gui();
             else if (menu == "beeps") beeps_gui();
             else if (menu == "AAE") AAE_gui();
             else if (menu == "settings") settings_gui();
@@ -914,7 +945,7 @@ namespace Chatterer
 
             GUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
             _content.text = "Chatter frequency: " + chatter_freq_str;
-            _content.tooltip = "How often chatter will play";
+            _content.tooltip = "How often chatter will play"; GUILayout.Label(_content, label_txt_left, GUILayout.ExpandWidth(true));
             GUILayout.Label(_content, label_txt_left, GUILayout.ExpandWidth(true));
             chatter_freq_slider = GUILayout.HorizontalSlider(chatter_freq_slider, 0, 5f, GUILayout.Width(100f));
             GUILayout.EndHorizontal();
@@ -988,8 +1019,9 @@ namespace Chatterer
                         GUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
 
                         bool temp = chatter_array[i].is_active;
-                        _content.text = chatter_array[i].directory + " (" + (chatter_array[i].capcom.Count + chatter_array[i].capsule.Count + chatter_array[i].capsuleF.Count).ToString() + " clips)";
+                        _content.text = chatter_array[i].directory + " (" + (chatter_array[i].capcom.Count + chatter_array[i].capsule.Count + chatter_array[i].capsuleF.Count + chatter_array[i].capsuleR.Count).ToString() + " clips)";
                         if (chatter_array[i].capsuleF.Count > 0) _content.text = _content.text + " (Female set in)";
+                        if (chatter_array[i].capsuleR.Count > 0) _content.text = _content.text + " (Robot set in)";
                         _content.tooltip = "Toggle this chatter set on/off";
                         chatter_array[i].is_active = GUILayout.Toggle(chatter_array[i].is_active, _content, GUILayout.ExpandWidth(true));
                         _content.text = "Remove";
@@ -1706,7 +1738,7 @@ namespace Chatterer
             //disable_power_usage = GUILayout.Toggle(disable_power_usage, _content);
             //GUILayout.EndHorizontal();
 
-            if (vessel.GetCrewCount() > 0)
+            if (vessel.GetCrewCount() > 0 || checkRobotPresent())
             {
                 _content.text = "Disable beeps during chatter";
                 _content.tooltip = "Stop beeps from beeping while chatter is playing";
@@ -1727,7 +1759,7 @@ namespace Chatterer
             show_advanced_options = GUILayout.Toggle(show_advanced_options, _content);
             GUILayout.EndHorizontal();
 
-            if (vessel.GetCrewCount() > 0)
+            if (vessel.GetCrewCount() > 0 || checkRobotPresent())
             {
                 //Insta-chatter key
                 GUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
@@ -2483,7 +2515,7 @@ namespace Chatterer
             //if exists, run GetFiles() for each of the file extensions
 
 
-            string[] set_types = { "capcom", "capsule", "capsuleF" };
+            string[] set_types = { "capcom", "capsule", "capsuleF", "capsuleR" };
             string[] audio_file_ext = { "*.wav", "*.ogg", "*.aif", "*.aiff" };
             int k;
 
@@ -2513,6 +2545,7 @@ namespace Chatterer
                                 if (st == "capcom") chatter_array[k].capcom.Clear();
                                 else if (st == "capsule") chatter_array[k].capsule.Clear();
                                 else if (st == "capsuleF") chatter_array[k].capsuleF.Clear();//clear any existing audio
+                                else if (st == "capsuleR") chatter_array[k].capsuleR.Clear();
 
                                 string[] st_array;
                                 foreach (string ext in audio_file_ext)
@@ -2559,6 +2592,11 @@ namespace Chatterer
                                                     chatter_array[k].capsuleF.Add(www_chatter.GetAudioClip(false));
                                                     //if (debugging) Debug.Log("[CHATR] " + mp3_path + " loaded OK");
                                                 }
+                                                else if (st == "capsuleR")
+                                                {
+                                                    chatter_array[k].capsuleR.Add(www_chatter.GetAudioClip(false));
+                                                    //if (debugging) Debug.Log("[CHATR] " + mp3_path + " loaded OK");
+                                                }
                                             }
                                         }
                                         else
@@ -2579,6 +2617,11 @@ namespace Chatterer
                                                 else if (st == "capsuleF")
                                                 {
                                                     chatter_array[k].capsuleF.Add(GameDatabase.Instance.GetAudioClip(gdb_path));
+                                                    //if (debugging) Debug.Log("[CHATR] " + gdb_path + " loaded OK");
+                                                }
+                                                else if (st == "capsuleR")
+                                                {
+                                                    chatter_array[k].capsuleR.Add(GameDatabase.Instance.GetAudioClip(gdb_path));
                                                     //if (debugging) Debug.Log("[CHATR] " + gdb_path + " loaded OK");
                                                 }
                                             }
@@ -2733,6 +2776,7 @@ namespace Chatterer
             current_capcom_chatter.Clear();
             current_capsule_chatter.Clear();
             current_capsuleF_chatter.Clear();
+            current_capsuleR_chatter.Clear();
 
             int i;
             for (i = 0; i < chatter_array.Count; i++)
@@ -2742,6 +2786,7 @@ namespace Chatterer
                     current_capcom_chatter.AddRange(chatter_array[i].capcom);
                     current_capsule_chatter.AddRange(chatter_array[i].capsule);
                     current_capsuleF_chatter.AddRange(chatter_array[i].capsuleF);
+                    current_capsuleR_chatter.AddRange(chatter_array[i].capsuleR);
                 }
             }
 
@@ -2773,6 +2818,7 @@ namespace Chatterer
             current_capcom_clip = rand.Next(0, current_capcom_chatter.Count); // select a new capcom clip to play
             current_capsule_clip = rand.Next(0, current_capsule_chatter.Count); // select a new capsule clip to play
             current_capsuleF_clip = rand.Next(0, current_capsuleF_chatter.Count); // select a new capsuleF clip to play
+            current_capsuleR_clip = rand.Next(0, current_capsuleR_chatter.Count);
 
             response_delay_secs = rand.Next(2, 5);  // select another random int to set response delay time
 
@@ -2783,27 +2829,95 @@ namespace Chatterer
             if (initial_chatter_source == 0)
             {
                 initial_chatter_set = current_capcom_chatter;
-                if (chatter_is_female) response_chatter_set = current_capsuleF_chatter;
-                else response_chatter_set = current_capsule_chatter;
+                if (present_chatter_genders[gender_male])
+                {
+                    if (present_chatter_genders[gender_female])
+                    {
+                        response_chatter_set = rand.Next(100) % 2 == 0 ? current_capsule_chatter : current_capsuleF_chatter;
+                    }
+                    else
+                    {
+                        response_chatter_set = current_capsule_chatter;
+                    }
+                }
+                else if (present_chatter_genders[gender_female])
+                {
+                    response_chatter_set = current_capsuleF_chatter;
+                }
+                else
+                {
+                    response_chatter_set = current_capsuleR_chatter;
+                }
 
                 initial_chatter_index = current_capcom_clip;
-                if (chatter_is_female) response_chatter_index = current_capsuleF_clip;
-                else response_chatter_index = current_capsule_clip;
+                if (present_chatter_genders[gender_male])
+                {
+                    if (present_chatter_genders[gender_female])
+                    {
+                        response_chatter_index = rand.Next(100) % 2 == 0 ? current_capsule_clip : current_capsuleF_clip;
+                    }
+                    else
+                    {
+                        response_chatter_index = current_capsule_clip;
+                    }
+                }
+                else if (present_chatter_genders[gender_female])
+                {
+                    response_chatter_index = current_capsuleF_clip;
+                }
+                else
+                {
+                    response_chatter_index = current_capsuleR_clip;
+                }
             }
             else
             {
-                if (chatter_is_female) initial_chatter_set = current_capsuleF_chatter;
-                else initial_chatter_set = current_capsule_chatter;
+                if (present_chatter_genders[gender_male])
+                {
+                    if (present_chatter_genders[gender_female])
+                    {
+                        initial_chatter_set = rand.Next(100) % 2 == 0 ? current_capsule_chatter : current_capsuleF_chatter;
+                    }
+                    else
+                    {
+                        initial_chatter_set = current_capsule_chatter;
+                    }
+                }
+                else if (present_chatter_genders[gender_female])
+                {
+                    initial_chatter_set = current_capsuleF_chatter;
+                }
+                else
+                {
+                    initial_chatter_set = current_capsuleR_chatter;
+                }
                 response_chatter_set = current_capcom_chatter;
 
-                if (chatter_is_female) initial_chatter_index = current_capsuleF_clip;
-                else initial_chatter_index = current_capsule_clip;
+                if (present_chatter_genders[gender_male])
+                {
+                    if (present_chatter_genders[gender_female])
+                    {
+                        initial_chatter_index = rand.Next(100) % 2 == 0 ? current_capsule_clip : current_capsuleF_clip;
+                    }
+                    else
+                    {
+                        initial_chatter_index = current_capsule_clip;
+                    }
+                }
+                else if (present_chatter_genders[gender_female])
+                {
+                    initial_chatter_index = current_capsuleF_clip;
+                }
+                else
+                {
+                    initial_chatter_index = current_capsuleR_clip;
+                }
                 response_chatter_index = current_capcom_clip;
             }
             if (initial_chatter_set.Count > 0) initial_chatter.clip = initial_chatter_set[initial_chatter_index];
-            else Debug.LogWarning("[CHATR] Initial chatter set is empty");
+            else Debug.LogWarning("[CHATR] Initial chatter set is empty, counts - capcom: " + current_capcom_chatter.Count + ", male : " + current_capsule_chatter.Count + ", female: " + current_capsuleF_chatter.Count + ", robot: " + current_capsuleR_chatter.Count);
             if (response_chatter_set.Count > 0) response_chatter.clip = response_chatter_set[response_chatter_index];
-            else Debug.LogWarning("[CHATR] Response chatter set is empty");
+            else Debug.LogWarning("[CHATR] Response chatter set is empty, counts - capcom: " + current_capcom_chatter.Count + ", male : " + current_capsule_chatter.Count + ", female: " + current_capsuleF_chatter.Count + ", robot: " + current_capsuleR_chatter.Count);
         }
 
         private void play_quindar(float delay)
@@ -3882,7 +3996,7 @@ namespace Chatterer
                 //do chatter
                 if (chatter_exists)
                 {
-                    if (vessel.GetCrewCount() > 0)
+                    if (vessel.GetCrewCount() > 0 || checkRobotPresent())
                     {
                         //Has crew onboard
                         //do insta-chatter if chatter is off
