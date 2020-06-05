@@ -54,13 +54,17 @@ namespace Chatterer
                     {
                         if (quindar_toggle)
                         {
+                            initial_chatter.PlayOneShot(quindar1.clip); // Workaround [playing quindar with quindar.audiosource is BROKEN : hangs exchange since KSP v1.4.0 for some weird reasons]
+                            if (debugging) Debug.Log("[CHATR] playingOneShot initial quindar");
+                            yield return new WaitForSeconds(quindar1.clip.length);
+
                             initial_chatter.Play();
                             if (debugging) Debug.Log("[CHATR] playing initial chatter");
                             yield return new WaitForSeconds(initial_chatter.clip.length);
 
-                            initial_chatter.PlayOneShot(quindar1.clip); // Workaround [playing quindar with quindar.audiosource is BROKEN : hangs exchange since KSP v1.4.0 for some weird reasons]
+                            initial_chatter.PlayOneShot(quindar2.clip); // Workaround [playing quindar with quindar.audiosource is BROKEN : hangs exchange since KSP v1.4.0 for some weird reasons]
                             if (debugging) Debug.Log("[CHATR] playingOneShot initial quindar");
-                            yield return new WaitForSeconds(quindar1.clip.length);
+                            yield return new WaitForSeconds(quindar2.clip.length);
 
                             //initial chatter has finished playing
 
@@ -102,6 +106,10 @@ namespace Chatterer
 
                     if (quindar_toggle)
                     {
+                        response_chatter.PlayOneShot(quindar1.clip); // Workaround [playing quindar with quindar.audiosource is BROKEN : hangs exchange since KSP v1.4.0 for some weird reasons]
+                        if (debugging) Debug.Log("[CHATR] playingOneShot response quindar");
+                        yield return new WaitForSeconds(quindar1.clip.length);
+
                         response_chatter.Play();
                         if (debugging) Debug.Log("[CHATR] playing response chatter");
                         yield return new WaitForSeconds(response_chatter.clip.length);
